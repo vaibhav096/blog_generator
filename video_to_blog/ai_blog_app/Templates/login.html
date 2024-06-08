@@ -14,10 +14,10 @@
         <div>
             <h1 class="text-3xl font-bold">AI Blog Generator</h1>
         </div>
-        <div>
+        <!-- <div>
             <a href="#" class="text-white hover:underline">Login</a>
-            <a href="#" class="text-white hover:underline">Signup</a>
-        </div>
+            
+        </div> -->
     </nav>
 
     <!-- Main content -->
@@ -25,8 +25,14 @@
         <div class="bg-white p-8 shadow-md rounded-lg max-w-md w-full">
 
             <!-- Login form -->
-            <form class="space-y-4">
-               
+            <form class="space-y-4" action="" method="post">
+                {%csrf_token%}
+                {% if error_message %}
+                <div align="center" style="color: red;">
+                    <h2>{{error_message}}</h2>
+                </div>
+                {% endif %}
+
 
                 <h2 class="text-xl font-semibold">Login</h2>
                 <div>
@@ -40,6 +46,9 @@
                 </div>
                 <button type="submit" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Login</button>
             </form>
+
+
+            <h3 class="mx-auto my-8 font-semibold">If Not Registerd 👉 <a href="signup" class="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">  Signup  </a></h3>
 
         </div>
     </div>
