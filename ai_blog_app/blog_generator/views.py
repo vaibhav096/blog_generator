@@ -94,7 +94,7 @@ def download_audio(link):
 def get_transcription(link):
     audio_file = download_audio(link)
     aai.settings.api_key = ASSEMBLYAI_API_KEY
-    print(f"API Key Set: {aai.settings.api_key}") 
+
     transcriber = aai.Transcriber()
     transcript = transcriber.transcribe(audio_file)
 
@@ -105,7 +105,7 @@ def generate_blog_from_transcription(transcription):
     prompt = f"Based on the following transcript from a YouTube video, write a comprehensive blog article containing words less than 1000 , write descriptive blog article dont use styling, write it based on the transcript, but dont make it look like a youtube video, make it look like a proper blog article:\n\n{transcription}\n\nArticle:"
     
     model = genai.GenerativeModel('gemini-1.5-flash')
-    pattern =  r"\*\*\*|##|,+"
+    pattern =  r"\* \*\*|##|\*\*"
 
 
     response = model.generate_content(prompt)
