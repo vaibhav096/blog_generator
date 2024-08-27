@@ -28,7 +28,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 
 ASSEMBLYAI_API_KEY=os.getenv("ASSEMBLYAI_API_KEY")
 
-from pytube import YouTube
+from pytubefix import YouTube
 import re
 
 @login_required
@@ -79,17 +79,31 @@ def yt_title(link):
     title = yt.title
     return title
 
+# def download_audio(link):
+#     yt = YouTube(link)
+#     video = yt.streams.get_audio_only()
+#     out_file = video.download(output_path=settings.MEDIA_ROOT)
+#     base, ext = os.path.splitext(out_file)
+#     new_file = base + '.mp3'
+#     if not os.path.exists(new_file):
+#         os.rename(out_file, new_file)
+#     else:
+#         os.remove(out_file)
+#     return new_file
+def sanitize_filename(filename):
+    return "".join(c if c.isalnum() or c in " ._-" else "_" for c in filename)
+
 def download_audio(link):
-    yt = YouTube(link)
-    video = yt.streams.filter(only_audio=True).first()
-    out_file = video.download(output_path=settings.MEDIA_ROOT)
-    base, ext = os.path.splitext(out_file)
-    new_file = base + '.mp3'
-    if not os.path.exists(new_file):
-        os.rename(out_file, new_file)
-    else:
-        os.remove(out_file)
-    return new_file
+    try:
+        yt = YouTube(link)
+        yt_title = sanitize_filename(yt.title)
+        audio_stream = yt.streams.get_audio_only()
+        audio_filename = f'{yt_title}.mp3'
+        audio_stream.download(output_path=settings.MEDIA_ROOT, filename=audio_filename)
+        return os.path.join(settings.MEDIA_ROOT, audio_filename)
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
 
 def get_transcription(link):
     audio_file = download_audio(link)
