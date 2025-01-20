@@ -110,42 +110,53 @@
     </footer>
 
     <script>
-        document.getElementById('generateBlogButton').addEventListener('click', async () => {
+    document.getElementById('generateBlogButton').addEventListener('click', async () => {
+        const youtubeLink = document.getElementById('youtubeLink').value;
+        const blogContent = document.getElementById('blogContent');
+        
+        if (youtubeLink) {
+            // Show the loading circle
+            document.getElementById('loading-circle').style.display = 'block';
             
+            // Clear any previous content
+            blogContent.innerHTML = ''; 
 
-            const youtubeLink = document.getElementById('youtubeLink').value;
-            const blogContent = document.getElementById('blogContent');
+            const endpointUrl = '/generate-blog';
             
-            if(youtubeLink) {
-                document.getElementById('loading-circle').style.display = 'block';
-                
-                blogContent.innerHTML = ''; // Clear previous content
+            try {
+                // Make a POST request to the backend with the YouTube link
+                const response = await fetch(endpointUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ link: youtubeLink })
+                });
 
-                const endpointUrl = '/generate-blog';
-                
-                try {
-                    const response = await fetch(endpointUrl, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ link: youtubeLink })
-                    });
+                // Parse the JSON response
+                const data = await response.json();
 
-                    const data = await response.json();
-
-                    blogContent.innerHTML = data.content;
-
-                } catch (error) {
-                    console.error("Error occurred:", error);
-                    alert("Something went wrong. Please try again later.");
-                    
+                // Check for errors from the backend
+                if (data.error) {
+                    throw new Error(data.error);
                 }
-                document.getElementById('loading-circle').style.display = 'none';
-            } else {
-                alert("Please enter a YouTube link.");
+
+                // Set the HTML content in the blog section
+                blogContent.innerHTML = data.content;  // This will render the HTML content returned by the backend
+
+            } catch (error) {
+                // If an error occurs, display it
+                console.error("Error occurred:", error);
+                alert("Something went wrong. Please try again later.");
             }
-        });
-    </script>
+
+            // Hide the loading circle
+            document.getElementById('loading-circle').style.display = 'none';
+        } else {
+            alert("Please enter a YouTube link.");
+        }
+    });
+</script>
+
 </body>
 </html>
