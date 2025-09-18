@@ -9,8 +9,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-import assemblyai as aai
-from pytubefix import YouTube
+
 import google.generativeai as genai
 from .models import BlogPost
 
@@ -19,100 +18,97 @@ load_dotenv()
 
 # Configure APIs
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
+# ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
 genai.configure(api_key=GOOGLE_API_KEY)
-aai.settings.api_key = ASSEMBLYAI_API_KEY
+# aai.settings.api_key = ASSEMBLYAI_API_KEY
+from youtube_transcript_api import YouTubeTranscriptApi
+
+def validate_and_extract_video_id(url: str) -> str:
+    """Validate YouTube URL and extract video ID."""
+    from urllib.parse import urlparse, parse_qs
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname.lower() if parsed.hostname else ''
+    path = parsed.path
+
+    if 'youtube.com' not in hostname and 'youtu.be' not in hostname:
+        return None
+
+    if 'youtu.be' in hostname:
+        return path[1:] if len(path) > 1 else None
+
+    if 'youtube.com' in hostname:
+        if path == '/watch':
+            qs = parse_qs(parsed.query)
+            return qs.get('v', [None])[0]
+        elif path.startswith('/embed/') or path.startswith('/v/'):
+            parts = path.split('/')
+            return parts[2] if len(parts) > 2 else None
+
+    return None
 
 
-# Utility Functions
-def is_valid_youtube_link(link):
-    """Validate if a link is a valid YouTube URL."""
-    pattern = r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/(watch\?v=)?[a-zA-Z0-9_-]+'
-    return re.match(pattern, link) is not None
 
-
-def yt_title(link):
-    """Fetch the YouTube video title."""
+def fetch_transcript(video_id: str, languages=['en', 'mr','hi']) -> str:
     try:
-        yt = YouTube(link, use_oauth=True, allow_oauth_cache=True)
-        return yt.title
+        ytt_api = YouTubeTranscriptApi()
+        fetched_transcript = ytt_api.fetch(video_id, languages=languages)
+        return " ".join([snippet.text for snippet in fetched_transcript])
     except Exception as e:
-        print(f"Error fetching title: {e}")
+        print(f"Transcript fetch error: {e}")
         return None
 
 
-def download_audio(link):
-    """Download audio from a YouTube video and convert it to MP3."""
-    try:
-        yt = YouTube(link, use_oauth=True, allow_oauth_cache=True)
-        video = yt.streams.filter(only_audio=True).first()
 
-        if video is None:
-            raise Exception("No audio stream found")
 
-        out_file = video.download(output_path=settings.MEDIA_ROOT)
-        base, ext = os.path.splitext(out_file)
-        new_file = base + '.mp3'
+def generate_blog_from_transcription(transcription: str) -> str:
+    """
+    Generate a blog or appropriate summary from a YouTube transcript using Gemini API.
+    Title is provided by the user, so this only returns blog/summary content.
+    """
 
-        if os.path.exists(new_file):
-            os.remove(new_file)
-        os.rename(out_file, new_file)
+    prompt = f"""
+    You are an expert content generator.  
+    You will receive the transcript of a YouTube video.  
 
-        return new_file
-    except Exception as e:
-        print(f"Audio download error: {e}")
-        return None
+    ### Main Task:
+    Based on the type of video, decide the best output format:
 
-def summarize_transcript(transcript):
-    """Summarize the transcript to extract important points."""
-    # Use a simple summarization model, or define a prompt to summarize
-    prompt = (
-        f"Summarize the following transcript into the most important points. Focus on key highlights and avoid unnecessary details:\n\n"
-        f"{transcript}\n\nSummary:"
-    )
+    1. **If video is Educational / Tutorial / Tech Review / Documentary / Interview / Lifestyle / Explainer** →  
+       Generate a **well-structured blog post** with: Introduction, Main Body, Key Takeaways, Conclusion.  
+
+    2. **If video is a Song / Music Video / Album Track** →  
+       Instead of a blog, return a **music summary** including:  
+       - Song name (if available)  
+       - Artist(s)  
+       - Genre & mood  
+       - Main theme / message  
+
+    3. **If video is a Sports Match / Cricket / Football / Highlights** →  
+       Return a **match summary** including:  
+       - Teams playing  
+       - Key highlights & turning points  
+       - Star performers  
+       - Final outcome / result (if present)  
+
+    4. **If video does not fit any category (random memes, trailers, pranks, short ads, etc.)** →  
+       Return a **brief descriptive summary** of what the video is about, instead of forcing a blog.  
+
+    ### Input Transcript:
+    {transcription}
+
+    ### Output:
+    Return only the **final blog, summary, or description** in clean Markdown.  
+    Do not generate or suggest a title.
+    """
 
     model = genai.GenerativeModel('gemini-1.5-flash')
     response = model.generate_content(prompt)
-    
-    # Return the summarized content
-    return response.text.strip()
+    blog_text = response.text.strip()
 
-def get_transcription(link):
-    """Generate a shorter transcription by summarizing key points."""
-    audio_file = download_audio(link)
-    if not audio_file:
-        raise Exception("Audio download failed")
-    
-    # Transcribe the audio, but focus only on the important parts
-    transcriber = aai.Transcriber()
-    transcript = transcriber.transcribe(audio_file)
-
-    # Summarize the transcription to focus on key points
-    summarized_transcript = summarize_transcript(transcript.text)
-
-    # Clean up downloaded audio file
-    if os.path.exists(audio_file):
-        os.remove(audio_file)
-
-    return summarized_transcript
+    return blog_text
 
 
-
-def generate_blog_from_transcription(transcription):
-    """Generate a blog article from a transcript using Gemini model."""
-    prompt = (
-        f"Based on the following transcript from a YouTube video, write a comprehensive blog "
-        f"article containing less than 1000 words. The article should not use YouTube-specific references "
-        f"but should be a proper blog:\n\n{transcription}\n\nArticle:"
-    )
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    pattern = r"\* \*\*|##|\*\*"
-    response = model.generate_content(prompt)
-
-    content = response.text.strip()
-    content = re.sub(pattern, "", content, flags=re.MULTILINE)
-
-    return content
 
 
 # View Functions
@@ -124,52 +120,57 @@ def index(request):
 
 @csrf_exempt
 def generate_blog(request):
-    """Generate a blog from a YouTube video link."""
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            yt_link = data['link']
+    """Generate a blog from a YouTube video link (title is user-provided)."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
 
-            if not is_valid_youtube_link(yt_link):
-                return JsonResponse({'error': 'Invalid YouTube link'}, status=400)
+    try:
+        data = json.loads(request.body)
+        yt_link = data.get('link')
+        user_title = data.get('title')
 
-            print("yt_link:", yt_link)
-        except (KeyError, json.JSONDecodeError):
-            return JsonResponse({'error': 'Invalid data sent'}, status=400)
+        if not yt_link or not user_title:
+            return JsonResponse({'error': 'Both YouTube link and Title are required'}, status=400)
 
-        # Get YouTube title
-        title = yt_title(yt_link)
-        if not title:
-            return JsonResponse({'error': 'Failed to fetch video title'}, status=500)
-        print("title:", title)
+        # Step 1: Validate and parse video ID
+        video_id = validate_and_extract_video_id(yt_link)
+        if not video_id:
+            return JsonResponse({'error': 'Invalid YouTube link'}, status=400)
 
-        # Get transcription
-        try:
-            transcription = get_transcription(yt_link)
-        except Exception as e:
-            print(f"Transcription error: {e}")
-            return JsonResponse({'error': 'Failed to get transcript'}, status=500)
+        # Step 2: Fetch transcript
+        transcription = fetch_transcript(video_id)
+        if not transcription:
+            return JsonResponse({'error': 'Failed to fetch transcript'}, status=500)
 
-        # Generate blog content
+        # Step 3: Generate blog content (AI only writes blog, not title)
         try:
             blog_content = generate_blog_from_transcription(transcription)
+            # print(f"User Title: {user_title}")
+            # print(f"Generated Blog Content: {blog_content[:100]}...")  # preview
         except Exception as e:
             print(f"Blog generation error: {e}")
-            return JsonResponse({'error': 'Failed to generate blog article'}, status=500)
+            return JsonResponse({'error': 'Failed to generate blog'}, status=500)
 
-        # Save blog article to the database
-        new_blog_article = BlogPost.objects.create(
-            user=request.user,
-            youtube_title=title,
+        # Step 4: Save blog article to DB
+        new_blog = BlogPost.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            youtube_title=user_title,
             youtube_link=yt_link,
             generated_content=blog_content,
         )
-        new_blog_article.save()
 
-        # Return blog content as a response
-        return JsonResponse({'content': blog_content})
+        # Step 5: Return JSON response
+        return JsonResponse({
+            'title': user_title,
+            'content': blog_content,
+            'blog_id': new_blog.id
+        })
 
-    return JsonResponse({'error': 'Invalid request method'}, status=405)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
 def blog_list(request):

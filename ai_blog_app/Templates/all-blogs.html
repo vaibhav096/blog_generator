@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,30 +24,36 @@
 
     <!-- Main Content Container -->
     <div class="container mx-auto mt-10 px-4 sm:px-0">
-        <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <div class="max-w-3xl mx-auto">
 
             <!-- Blog posts section -->
-            <section>
+            <section class="space-y-4">
                 <h2 class="text-xl mb-4 font-semibold">All Blog Posts</h2>
-                <div class="space-y-4">
-                    
-                    {% for article in blog_articles reversed %}
-                    <a href="blog-details/{{article.id}}">
-                        <div class="border border-gray-300 p-4 rounded-lg">
-                            <h3 class="text-lg font-semibold">{{article.youtube_title}}</h3>
-                            <p>{{article.generated_content|truncatechars:80}}</p>
-                        </div>
-                    </a>
-                    {% endfor %}
-                    
-                    <!-- Repeat -->
-                </div>
+                
+                {% for article in blog_articles reversed %}
+                <a href="{% url 'blog_details' article.id %}">
+                    <div class="border border-gray-300 p-4 rounded-lg bg-white hover:shadow-lg transition-shadow">
+                        <h3 class="text-lg font-semibold mb-2">{{ article.youtube_title }}</h3>
+                        
+                        <!-- Render first 3 lines as preview -->
+                        <p class="text-gray-700">
+                            {% with article.generated_content|linebreaksbr as preview %}
+                                {% for line in preview.splitlines|slice:":3" %}
+                                    {{ line|safe }}<br>
+                                {% endfor %}
+                                ...
+                            {% endwith %}
+                        </p>
+                    </div>
+                </a>
+                {% empty %}
+                <p class="text-gray-500">You have not generated any blogs yet.</p>
+                {% endfor %}
             </section>
 
         </div>
     </div>
 
-    
     <footer class="text-center p-4 text-black mt-6"> 
         powered by <a href="https://github.com/vaibhav096" class="">Mr. Vaibhav Jadhav</a>
     </footer>

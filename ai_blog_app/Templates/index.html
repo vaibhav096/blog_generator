@@ -1,162 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Blog Generator</title>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Blog Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 
-    <style>
-        @keyframes rotate {
-            from {
-                transform: rotate(0deg);
-            }
-            to { 
-                transform: rotate(360deg);
-            }
-        }
-         
-        
-         @-webkit-keyframes rotate {
-            from {
-                -webkit-transform: rotate(0deg);
-            }
-            to { 
-                -webkit-transform: rotate(360deg);
-            }
-        }
-        
-        .load {
-            width: 100px;
-            height: 100px;
-            margin: 110px auto 0;
-            border:solid 10px #8822aa;
-            border-radius: 50%;
-            border-right-color: transparent;
-            border-bottom-color: transparent;
-             -webkit-transition: all 0.5s ease-in;
-            -webkit-animation-name:             rotate; 
-            -webkit-animation-duration:         1.0s; 
-            -webkit-animation-iteration-count:  infinite;
-            -webkit-animation-timing-function: linear;
-                
-                 transition: all 0.5s ease-in;
-            animation-name:             rotate; 
-            animation-duration:         1.0s; 
-            animation-iteration-count:  infinite;
-            animation-timing-function: linear; 
-        }
-    </style>
+  <style>
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .load {
+      width: 80px;
+      height: 80px;
+      margin: 40px auto;
+      border: solid 8px #2563eb;
+      border-radius: 50%;
+      border-right-color: transparent;
+      border-bottom-color: transparent;
+      animation: rotate 1s linear infinite;
+    }
+  </style>
 </head>
-<body class="flex flex-col min-h-screen bg-gray-100 font-sans antialised">
-    <!-- Navbar -->
-    <nav class="bg-blue-600 p-4 text-white flex justify-between">
-        <div>
-            <h1 class="text-3xl font-bold">AI Blog Generator</h1>
-        </div>
-        <div>
-            <a href="#" class="text-white hover:underline mx-4">Welcome {{ user.username }}</a>
-            <a href="/blog-list" class="text-white hover:underline mx-4">Saved Blog Posts</a>
-            <a href="logout" class="text-white hover:underline">Logout</a>
-        </div>
-    </nav>
+<body class="flex flex-col min-h-screen bg-gray-100 font-sans antialiased">
 
-
-    <br>
-    <br>
-
-    <!-- Main -->
-    <div class="flex-grow container mx-auto mt-10 px-4 sm:px-0">
-        <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md transition-transform transform hover:scale-105 flex flex-col">
-
-            <!-- Introduction section -->
-            <div class="text-center">
-                <h2 class="text-2xl font-semibold mb-4">Welcome to the AI Blog Generator</h2>
-                <p class="text-gray-700">
-                    Generate high-quality blog articles from YouTube videos using artificial intelligence.
-                    Simply enter the link to the YouTube video below and let the AI create the content for you!
-                </p>
-            </div>
-
-            <br>
-
-            <!-- Youtube section -->
-            <div>
-                <h2 class="text-xl mb-4 font-semibold">Enter Youtube Video Link</h2>
-                <div class="flex space-x-4">
-                    <input id="youtubeLink" type="url" placeholder="Paste Youtube Link..." class="flex-grow p-2 border border-blue-400 rounded-l-md">
-                    <button id="generateBlogButton" class="bg-blue-600 text-white px-4 py-2 rounded-r-md hover:bg-blue-700 transition-colors">Generate</button>
-                </div>
-            </div>
-
-
-            <!-- section for loading circle -->
-            <div style="display: none;" id="loading-circle" class="load"></div>
-
-
-            <!-- Generated Blog Display Section -->
-            <section class="mt-10 flex-grow">
-                <h2 class="text-xl mb-4 font-semibold">Generated Blog Article</h2>
-                <div id="blogContent" class="mt-2 text-gray-700 space-y-4">
-                    
-                </div>
-            </section>
-        </div>
+  <!-- Navbar -->
+  <nav class="bg-blue-600 p-4 text-white flex justify-between">
+    <h1 class="text-2xl font-bold">AI Blog Generator</h1>
+    <div>
+      <a href="#" class="text-white hover:underline mx-4">Welcome {{ user.username }}</a>
+      <a href="/blog-list" class="text-white hover:underline mx-4">Saved Blog Posts</a>
+      <a href="logout" class="text-white hover:underline">Logout</a>
     </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="flex-grow container mx-auto mt-10 px-4 sm:px-0">
+    <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+
+      <!-- Introduction -->
+      <div class="text-center mb-6">
+        <h2 class="text-2xl font-semibold">Welcome to the AI Blog Generator</h2>
+        <p class="text-gray-700 mt-2">
+          Generate high-quality blog articles from YouTube videos using AI.<br>
+          Provide a YouTube link and (optionally) your own title.
+        </p>
+      </div>
+
+      <!-- Form -->
+      <form id="blogForm" class="space-y-4">
+        <!-- YouTube Link -->
+        <div>
+            <label for="videoTitle" class="block mb-1 font-medium">Blog Title *</label>
+            <input id="videoTitle" type="text" 
+                    placeholder="Enter a blog title..." 
+                    class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
+            </div>
+
+            <!-- YouTube Link input -->
+            <div>
+            <label for="youtubeLink" class="block mb-1 font-medium">YouTube Video Link *</label>
+            <input id="youtubeLink" type="url" 
+                    placeholder="Paste YouTube Link..." 
+                    class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
+            </div>
+
+            <!-- Submit Button -->
+            <button id="generateBlogButton" type="submit" 
+                    class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+            Generate Blog
+            </button>
+        </div>
+      </form>
+
+      <!-- Loading Spinner -->
+      <div id="loading-circle" class="load" style="display: none;"></div>
+
+      <!-- Blog Output -->
+      <section id="blogSection" class="mt-8 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h2 class="text-xl font-semibold mb-4 text-blue-700">Generated Blog Article</h2>
+            <h3 id="blogTitle" class="text-2xl font-bold text-gray-900 mb-4"></h3>
+            <div id="blogContent" class="prose prose-blue max-w-none text-gray-800"></div>
+        </div>
+</section>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center p-4 text-gray-600 mt-6">
+    Powered by <a href="https://github.com/vaibhav096" class="text-blue-600 hover:underline">Mr. Vaibhav Jadhav</a>
+  </footer>
+
+  <!-- Script -->
+  <script>
+    // Process blog text before rendering
+    function formatBlogContent(rawContent) {
+        let formatted = rawContent;
+
+        // 1. Boldify sections like **Introduction:**
+        formatted = formatted.replace(/\*\*(.*?)\:\*\*/g, "<strong>$1:</strong><br>");
+        formatted = formatted.replace(/\*\*(.*?)\:\s*/g, "<strong>$1:</strong><br>");
+
+        // 2. Convert Markdown-style lists into <ul><li>...</li></ul>
+        // Handles lines starting with * or - followed by a space
+        formatted = formatted.replace(/(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)/g, "<li>$1</li>");
+
+        // Wrap consecutive <li> inside <ul>
+        formatted = formatted.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+
+        // 3. Replace Markdown headings ## and ### with proper <h2>, <h3>
+        formatted = formatted.replace(/^### (.*$)/gim, "<h3>$1</h3>");
+        formatted = formatted.replace(/^## (.*$)/gim, "<h2>$1</h2>");
+        formatted = formatted.replace(/^# (.*$)/gim, "<h1>$1</h1>");
+
+        // 4. Replace remaining newlines with <br>
+        formatted = formatted.replace(/\n/g, "<br>");
+
+        return formatted;
+    }
 
 
-    <footer class="text-center p-4 text-blacl mt-6">
-        Powered by <a href="https://github.com/vaibhav096">Mr. Vaibhav Jadhav </a>
-    </footer>
+    document.getElementById('blogForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-    <script>
-    document.getElementById('generateBlogButton').addEventListener('click', async () => {
-        const youtubeLink = document.getElementById('youtubeLink').value;
+        const youtubeLink = document.getElementById('youtubeLink').value.trim();
+        const videoTitle = document.getElementById('videoTitle').value.trim();
         const blogContent = document.getElementById('blogContent');
-        
-        if (youtubeLink) {
-            // Show the loading circle
-            document.getElementById('loading-circle').style.display = 'block';
-            
-            // Clear any previous content
-            blogContent.innerHTML = ''; 
-
-            const endpointUrl = '/generate-blog';
-            
-            try {
-                // Make a POST request to the backend with the YouTube link
-                const response = await fetch(endpointUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ link: youtubeLink })
-                });
-
-                // Parse the JSON response
-                const data = await response.json();
-
-                // Check for errors from the backend
-                if (data.error) {
-                    throw new Error(data.error);
-                }
-
-                // Set the HTML content in the blog section
-                blogContent.innerHTML = data.content;  // This will render the HTML content returned by the backend
-
-            } catch (error) {
-                // If an error occurs, display it
-                console.error("Error occurred:", error);
-                alert("Something went wrong. Please try again later.");
-            }
-
-            // Hide the loading circle
-            document.getElementById('loading-circle').style.display = 'none';
-        } else {
-            alert("Please enter a YouTube link.");
+        const blogTitle = document.getElementById('blogTitle');
+        if (!youtubeLink || !videoTitle) {
+            alert("⚠️ Please provide both Title and YouTube Link.");
+            return;
         }
-    });
-</script>
 
+        document.getElementById('loading-circle').style.display = 'block';
+        blogContent.innerHTML = '';
+
+        const endpointUrl = '/generate-blog';
+
+        try {
+            const response = await fetch(endpointUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ link: youtubeLink, title: videoTitle })
+            });
+
+            const data = await response.json();
+
+            if (data.error) throw new Error(data.error);
+            console.log(data);
+
+            blogTitle.textContent = data.title;
+            blogContent.innerHTML = formatBlogContent(data.content);
+            document.getElementById('blogSection').classList.remove('hidden');
+
+        } catch (error) {
+            console.error("Error occurred:", error);
+            alert("❌ Something went wrong. Please try again.");
+        }
+
+        document.getElementById('loading-circle').style.display = 'none';
+    });
+
+  </script>
 </body>
 </html>
