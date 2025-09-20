@@ -16,7 +16,7 @@
             <h1 class="text-3xl font-bold">AI Blog Generator</h1>
         </div>
         <div>
-            <a href="#" class="text-white hover:underline mx-4">Welcome {{ user.username }}</a>
+            <a href="{% url 'index' %}" class="text-white hover:underline mx-4">Welcome {{ user.username }}</a>
             <a href="/blog-list" class="text-white hover:underline mx-4">Saved Blog Posts</a>
             <a href="logout" class="text-white hover:underline">Logout</a>
         </div>
@@ -30,25 +30,25 @@
             <section class="space-y-4">
                 <h2 class="text-xl mb-4 font-semibold">All Blog Posts</h2>
                 
-                {% for article in blog_articles reversed %}
-                <a href="{% url 'blog_details' article.id %}">
-                    <div class="border border-gray-300 p-4 rounded-lg bg-white hover:shadow-lg transition-shadow">
-                        <h3 class="text-lg font-semibold mb-2">{{ article.youtube_title }}</h3>
-                        
-                        <!-- Render first 3 lines as preview -->
-                        <p class="text-gray-700">
-                            {% with article.generated_content|linebreaksbr as preview %}
-                                {% for line in preview.splitlines|slice:":3" %}
-                                    {{ line|safe }}<br>
-                                {% endfor %}
-                                ...
-                            {% endwith %}
-                        </p>
+                <div class="space-y-4">
+                    {% for article in blog_articles reversed %}
+                    <div class="border border-gray-300 p-4 rounded-lg bg-white hover:shadow-lg transition-shadow flex justify-between items-center">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">{{ article.youtube_title|safe }}</h3>
+                            <p>{{ article.generated_content|truncatechars:100 }}</p>
+                        </div>
+                        <div class="space-x-4-flex flex-col items-center space-y-2">
+                            <!-- View Button -->
+                            <a href="{% url 'blog-details' article.id %}" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-700 transition-colors"> View </a>
+                            
+                            <!-- Delete Button -->
+                            <button onclick="deleteBlog('{{ article.id }}')" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-700 transition-colors">Delete</button>
+                        </div>
                     </div>
-                </a>
-                {% empty %}
-                <p class="text-gray-500">You have not generated any blogs yet.</p>
-                {% endfor %}
+                    {% empty %}
+                    <p class="text-gray-500">You have not generated any blogs yet.</p>
+                    {% endfor %}
+                </div>
             </section>
 
         </div>
@@ -60,3 +60,27 @@
     
 </body>
 </html>
+
+<script>
+function deleteBlog(blogId) {
+    if (!confirm("Are you sure you want to delete this blog?")) return;
+    blogId = parseInt(blogId);
+    fetch(`/delete-blog/${blogId}/`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert("Blog deleted successfully!");
+            location.reload(); // refresh the page to update list
+        } else {
+            alert("Error deleting blog: " + data.error);
+        }
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Something went wrong!");
+    });
+}
+</script>

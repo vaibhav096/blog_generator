@@ -36,56 +36,47 @@
   </nav>
 
   <!-- Main -->
-  <main class="flex-grow container mx-auto mt-10 px-4 sm:px-0">
-    <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+  <main class="flex-grow container mx-auto mt-10 px-4 sm:px-0 space-y-10">
 
-      <!-- Introduction -->
+    <!-- Form Container -->
+    <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
       <div class="text-center mb-6">
         <h2 class="text-2xl font-semibold">Welcome to the AI Blog Generator</h2>
         <p class="text-gray-700 mt-2">
           Generate high-quality blog articles from YouTube videos using AI.<br>
-          Provide a YouTube link and (optionally) your own title.
+          Provide a YouTube link and your blog title.
         </p>
       </div>
 
-      <!-- Form -->
       <form id="blogForm" class="space-y-4">
-        <!-- YouTube Link -->
         <div>
-            <label for="videoTitle" class="block mb-1 font-medium">Blog Title *</label>
-            <input id="videoTitle" type="text" 
-                    placeholder="Enter a blog title..." 
-                    class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
-            </div>
-
-            <!-- YouTube Link input -->
-            <div>
-            <label for="youtubeLink" class="block mb-1 font-medium">YouTube Video Link *</label>
-            <input id="youtubeLink" type="url" 
-                    placeholder="Paste YouTube Link..." 
-                    class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
-            </div>
-
-            <!-- Submit Button -->
-            <button id="generateBlogButton" type="submit" 
-                    class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-            Generate Blog
-            </button>
+          <label for="videoTitle" class="block mb-1 font-medium">Blog Title *</label>
+          <input id="videoTitle" type="text" placeholder="Enter a blog title..." class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
         </div>
+
+        <div>
+          <label for="youtubeLink" class="block mb-1 font-medium">YouTube Video Link *</label>
+          <input id="youtubeLink" type="url" placeholder="Paste YouTube Link..." class="w-full p-2 border border-blue-400 rounded-md focus:ring focus:ring-blue-300">
+        </div>
+
+        <button id="generateBlogButton" type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+          Generate Blog
+        </button>
       </form>
 
       <!-- Loading Spinner -->
       <div id="loading-circle" class="load" style="display: none;"></div>
-
-      <!-- Blog Output -->
-      <section id="blogSection" class="mt-8 hidden">
-        <div class="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-            <h2 class="text-xl font-semibold mb-4 text-blue-700">Generated Blog Article</h2>
-            <h3 id="blogTitle" class="text-2xl font-bold text-gray-900 mb-4"></h3>
-            <div id="blogContent" class="prose prose-blue max-w-none text-gray-800"></div>
-        </div>
-</section>
     </div>
+
+    <!-- Blog Content Container -->
+    <div id="blogSection" class="hidden">
+      <div class="max-w-5xl mx-auto bg-white p-6 rounded-lg shadow-md border border-gray-200">
+        <h2 class="text-xl font-semibold mb-4 text-blue-700">Generated Blog Article</h2>
+        <h3 id="blogTitle" class="text-2xl font-bold text-gray-900 mb-4"></h3>
+        <div id="blogContent" class="prose prose-blue max-w-none text-gray-800 overflow-y-auto max-h-[700px] p-4"></div>
+      </div>
+    </div>
+
   </main>
 
   <!-- Footer -->
@@ -93,35 +84,7 @@
     Powered by <a href="https://github.com/vaibhav096" class="text-blue-600 hover:underline">Mr. Vaibhav Jadhav</a>
   </footer>
 
-  <!-- Script -->
   <script>
-    // Process blog text before rendering
-    function formatBlogContent(rawContent) {
-        let formatted = rawContent;
-
-        // 1. Boldify sections like **Introduction:**
-        formatted = formatted.replace(/\*\*(.*?)\:\*\*/g, "<strong>$1:</strong><br>");
-        formatted = formatted.replace(/\*\*(.*?)\:\s*/g, "<strong>$1:</strong><br>");
-
-        // 2. Convert Markdown-style lists into <ul><li>...</li></ul>
-        // Handles lines starting with * or - followed by a space
-        formatted = formatted.replace(/(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)/g, "<li>$1</li>");
-
-        // Wrap consecutive <li> inside <ul>
-        formatted = formatted.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
-
-        // 3. Replace Markdown headings ## and ### with proper <h2>, <h3>
-        formatted = formatted.replace(/^### (.*$)/gim, "<h3>$1</h3>");
-        formatted = formatted.replace(/^## (.*$)/gim, "<h2>$1</h2>");
-        formatted = formatted.replace(/^# (.*$)/gim, "<h1>$1</h1>");
-
-        // 4. Replace remaining newlines with <br>
-        formatted = formatted.replace(/\n/g, "<br>");
-
-        return formatted;
-    }
-
-
     document.getElementById('blogForm').addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -129,6 +92,7 @@
         const videoTitle = document.getElementById('videoTitle').value.trim();
         const blogContent = document.getElementById('blogContent');
         const blogTitle = document.getElementById('blogTitle');
+
         if (!youtubeLink || !videoTitle) {
             alert("⚠️ Please provide both Title and YouTube Link.");
             return;
@@ -137,24 +101,20 @@
         document.getElementById('loading-circle').style.display = 'block';
         blogContent.innerHTML = '';
 
-        const endpointUrl = '/generate-blog';
-
         try {
-            const response = await fetch(endpointUrl, {
+            const response = await fetch('/generate-blog', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ link: youtubeLink, title: videoTitle })
             });
 
             const data = await response.json();
-
             if (data.error) throw new Error(data.error);
-            console.log(data);
 
             blogTitle.textContent = data.title;
-            blogContent.innerHTML = formatBlogContent(data.content);
-            document.getElementById('blogSection').classList.remove('hidden');
+            blogContent.innerHTML = data.content;
 
+            document.getElementById('blogSection').classList.remove('hidden');
         } catch (error) {
             console.error("Error occurred:", error);
             alert("❌ Something went wrong. Please try again.");
@@ -162,7 +122,6 @@
 
         document.getElementById('loading-circle').style.display = 'none';
     });
-
   </script>
 </body>
 </html>

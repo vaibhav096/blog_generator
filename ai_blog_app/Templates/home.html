@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Blog Generator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow-md">
+        <div class="container mx-auto flex justify-between items-center py-4 px-6">
+            <h1 class="text-2xl font-bold text-blue-600">AI Blog Generator</h1>
+            <div class="space-x-4">
+                <a href="{% url 'login' %}" class="px-4 py-2 rounded-md bg-blue-600 text-white font-medium hover:bg-blue-700">Login</a>
+                <a href="{% url 'signup' %}" class="px-4 py-2 rounded-md border border-blue-600 text-blue-600 font-medium hover:bg-blue-50">Signup</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="text-center py-20 bg-gradient-to-r from-blue-50 to-white">
+        <h2 class="text-4xl font-extrabold mb-6 text-gray-900">Turn YouTube Videos into Blogs with AI</h2>
+        <p class="text-lg text-gray-600 mb-8 max-w-2xl mx-auto">
+            Save time and effort. Paste a YouTube link, give your blog a title, and let our AI transform video transcripts into meaningful, well-structured blog posts.
+        </p>
+        <div class="space-x-4">
+            <a href="{% url 'signup' %}" class="px-6 py-3 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 shadow">Get Started</a>
+            <a href="{% url 'login' %}" class="px-6 py-3 rounded-lg border border-blue-600 text-blue-600 font-semibold hover:bg-blue-50">Login</a>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="py-16 container mx-auto px-6">
+        <h3 class="text-2xl font-bold text-center mb-12">Why Choose Our Blog Generator?</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
+            <div class="bg-white p-6 rounded-lg shadow hover:shadow-lg">
+                <h4 class="text-lg font-semibold mb-2 text-blue-600">Save Time</h4>
+                <p class="text-gray-600">No need to watch lengthy videos or read full transcripts. Get concise blogs instantly.</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow hover:shadow-lg">
+                <h4 class="text-lg font-semibold mb-2 text-blue-600">AI-Powered</h4>
+                <p class="text-gray-600">Our AI transforms transcripts into structured, professional, and SEO-friendly blogs.</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow hover:shadow-lg">
+                <h4 class="text-lg font-semibold mb-2 text-blue-600">Stay Organized</h4>
+                <p class="text-gray-600">Save, revisit, and manage all your generated blogs in one place.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 bg-gray-100 border-t mt-12">
+        <p class="text-gray-600 text-sm">Powered by <a href="https://github.com/vaibhav096" class="text-blue-600 hover:underline">Mr. Vaibhav Jadhav</a></p>
+    </footer>
+
+</body>
+</html>

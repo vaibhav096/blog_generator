@@ -109,13 +109,39 @@ def generate_blog_from_transcription(transcription: str) -> str:
     return blog_text
 
 
+def format_blog_content(raw_content: str) -> str:
+    """Format AI-generated markdown-like content into clean HTML before saving."""
+    formatted = raw_content
 
+    # 1. Boldify sections like **Introduction:**
+    formatted = re.sub(r"\*\*(.*?)\:\*\*", r"<strong>\1:</strong><br>", formatted)
+    formatted = re.sub(r"\*\*(.*?)\:\s*", r"<strong>\1:</strong><br>", formatted)
+
+    # 2. Convert Markdown-style lists into <li>
+    formatted = re.sub(r"(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)", r"<li>\1</li>", formatted)
+
+    # Wrap consecutive <li> inside <ul>
+    formatted = re.sub(r"(<li>[\s\S]*?<\/li>)", r"<ul>\1</ul>", formatted)
+
+    # 3. Headings ## and ###
+    formatted = re.sub(r"^### (.*$)", r"<h3>\1</h3>", formatted, flags=re.MULTILINE)
+    formatted = re.sub(r"^## (.*$)", r"<h2>\1</h2>", formatted, flags=re.MULTILINE)
+    formatted = re.sub(r"^# (.*$)", r"<h1>\1</h1>", formatted, flags=re.MULTILINE)
+
+    # 4. Replace remaining newlines with <br>
+    formatted = formatted.replace("\n", "<br>")
+
+    return formatted
 
 # View Functions
 @login_required
 def index(request):
     """Render the index page."""
     return render(request, 'index.html')
+
+def home(request):
+    """Render the home page."""
+    return render(request, 'home.html')
 
 
 @csrf_exempt
@@ -144,9 +170,8 @@ def generate_blog(request):
 
         # Step 3: Generate blog content (AI only writes blog, not title)
         try:
-            blog_content = generate_blog_from_transcription(transcription)
-            # print(f"User Title: {user_title}")
-            # print(f"Generated Blog Content: {blog_content[:100]}...")  # preview
+            blog_content_raw = generate_blog_from_transcription(transcription)
+            blog_content = format_blog_content(blog_content_raw)  # ✅ apply formatting here
         except Exception as e:
             print(f"Blog generation error: {e}")
             return JsonResponse({'error': 'Failed to generate blog'}, status=500)
@@ -185,9 +210,21 @@ def blog_details(request, pk):
     if request.user == blog_article_detail.user:
         return render(request, 'blog-details.html', {'blog_article_detail': blog_article_detail})
     else:
-        return redirect('/')
+        return redirect('index')
 
-
+@csrf_exempt
+def delete_blog(request, pk):
+    if request.method != 'DELETE':
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+    try:
+        blog = BlogPost.objects.get(id=pk, user=request.user)
+        blog.delete()
+        return JsonResponse({'success': True})
+    except BlogPost.DoesNotExist:
+        return JsonResponse({'error': 'Blog not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+    
 def user_login(request):
     """Handle user login."""
     if request.method == 'POST':
@@ -197,7 +234,7 @@ def user_login(request):
         user = authenticate(request, username=username, password=password)
         if user:
             login(request, user)
-            return redirect('/')
+            return redirect('index')
         else:
             error_message = "Invalid username or password"
             return render(request, 'login.html', {'error_message': error_message})
@@ -218,7 +255,7 @@ def user_signup(request):
                 user = User.objects.create_user(username, email, password)
                 user.save()
                 login(request, user)
-                return redirect('/')
+                return redirect('index')
             except:
                 error_message = "Error occurred, make unique entries"
                 return render(request, 'signup.html', {'error_message': error_message})
@@ -232,4 +269,4 @@ def user_signup(request):
 def user_logout(request):
     """Handle user logout."""
     logout(request)
-    return redirect('/')
+    return redirect('home')
