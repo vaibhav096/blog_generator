@@ -9,7 +9,7 @@ from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-
+import requests, random
 import google.generativeai as genai
 from .models import BlogPost
 
@@ -47,6 +47,24 @@ def validate_and_extract_video_id(url: str) -> str:
 
     return None
 
+
+proxies_list = []
+for key, value in os.environ.items():
+    if key.startswith("PROXY_"):
+        proxies_list.append(value)
+
+# Save original requests.get
+old_get = requests.get
+
+# Define a monkey-patched get
+def proxy_get(url, *args, **kwargs):
+    if proxies_list:
+        proxy = random.choice(proxies_list)  # pick a random proxy
+        kwargs["proxies"] = {"http": proxy, "https": proxy}
+    return old_get(url, *args, **kwargs)
+
+# Patch requests.get globally
+requests.get = proxy_get
 
 
 def fetch_transcript(video_id: str, languages=['en', 'mr','hi']) -> str:
@@ -102,7 +120,7 @@ def generate_blog_from_transcription(transcription: str) -> str:
     Do not generate or suggest a title.
     """
 
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-pro')
     response = model.generate_content(prompt)
     blog_text = response.text.strip()
 
@@ -113,20 +131,26 @@ def format_blog_content(raw_content: str) -> str:
     """Format AI-generated markdown-like content into clean HTML before saving."""
     formatted = raw_content
 
-    # 1. Boldify sections like **Introduction:**
-    formatted = re.sub(r"\*\*(.*?)\:\*\*", r"<strong>\1:</strong><br>", formatted)
-    formatted = re.sub(r"\*\*(.*?)\:\s*", r"<strong>\1:</strong><br>", formatted)
-
-    # 2. Convert Markdown-style lists into <li>
-    formatted = re.sub(r"(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)", r"<li>\1</li>", formatted)
-
-    # Wrap consecutive <li> inside <ul>
-    formatted = re.sub(r"(<li>[\s\S]*?<\/li>)", r"<ul>\1</ul>", formatted)
-
-    # 3. Headings ## and ###
+    # 1. Headings: ####, ###, ##, #
+    formatted = re.sub(r"^#### (.*$)", r"<h4>\1</h4>", formatted, flags=re.MULTILINE)
     formatted = re.sub(r"^### (.*$)", r"<h3>\1</h3>", formatted, flags=re.MULTILINE)
     formatted = re.sub(r"^## (.*$)", r"<h2>\1</h2>", formatted, flags=re.MULTILINE)
     formatted = re.sub(r"^# (.*$)", r"<h1>\1</h1>", formatted, flags=re.MULTILINE)
+
+    # 2. Bold text with colon or without colon
+    formatted = re.sub(r"\*\*(.*?)\:\*\*", r"<strong>\1:</strong><br>", formatted)  # with colon
+    formatted = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", formatted)        # general bold
+
+    # 3. Convert Markdown-style lists into <li>
+    formatted = re.sub(r"(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)", r"<li>\1</li>", formatted)
+
+    # Wrap consecutive <li> inside <ul>
+    # We want to wrap multiple consecutive <li> together
+    def wrap_li(match):
+        items = match.group(0)
+        return f"<ul>{items}</ul>"
+
+    formatted = re.sub(r"(<li>[\s\S]*?<\/li>)+", wrap_li, formatted)
 
     # 4. Replace remaining newlines with <br>
     formatted = formatted.replace("\n", "<br>")
@@ -151,6 +175,7 @@ def generate_blog(request):
         return JsonResponse({'error': 'Invalid request method'}, status=405)
 
     try:
+        
         data = json.loads(request.body)
         yt_link = data.get('link')
         user_title = data.get('title')
