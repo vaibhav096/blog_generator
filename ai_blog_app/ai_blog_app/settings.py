@@ -11,15 +11,21 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
 from pathlib import Path
-import dj_database_url  
+import dj_database_url
 from dotenv import load_dotenv
-import os 
+import os
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load environment variables
 if os.environ.get('DJANGO_ENV') != 'production':
     load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+# Environment Configuration
+DJANGO_ENV = os.environ.get('DJANGO_ENV', 'development')
+IS_PRODUCTION = DJANGO_ENV == 'production'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -27,13 +33,24 @@ if os.environ.get('DJANGO_ENV') != 'production':
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-if os.environ.get('DJANGO_ENV') != 'production':
-    DEBUG = True
-else:
-    DEBUG = False
+# Validate SECRET_KEY exists
+if not SECRET_KEY:
+    if IS_PRODUCTION:
+        raise ValueError("SECRET_KEY environment variable is required in production")
+    else:
+        print("WARNING: SECRET_KEY not set, using insecure default for development")
+        SECRET_KEY = 'django-insecure-dev-key-change-this-in-production'
 
-ALLOWED_HOSTS = ['*']
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true' and not IS_PRODUCTION
+
+# ALLOWED_HOSTS Configuration
+if IS_PRODUCTION:
+    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+    if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
+        raise ValueError("ALLOWED_HOSTS must be set in production")
+else:
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
 
 # Application definition
@@ -78,13 +95,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_blog_app.wsgi.application'
 
-from dotenv import load_dotenv
-load_dotenv()
 
-DATABASES = {
-    'default': dj_database_url.parse(os.environ.get('DATABASE_URL'))
-}
+# Database
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    # Use PostgreSQL if DATABASE_URL is provided
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
+    }
+else:
+    # Default to SQLite for development
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -127,5 +156,84 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Authentication
+LOGIN_URL = 'login'
+LOGIN_REDIRECT_URL = 'index'
+LOGOUT_REDIRECT_URL = 'home'
 
-LOGIN_URL ='login'
+# Static files configuration
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = []
+
+# Media files
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+# Security Settings
+if IS_PRODUCTION:
+    # HTTPS and Security
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+    # CSRF Trusted Origins
+    csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+    if csrf_origins:
+        CSRF_TRUSTED_ORIGINS = csrf_origins.split(',')
+
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'require_debug_true': {
+            '()': 'django.utils.log.RequireDebugTrue',
+        },
+    },
+    'handlers': {
+        'console': {
+            'level': 'INFO',
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file': {
+            'level': 'WARNING',
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'django.log',
+            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'blog_generator': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+            'propagate': False,
+        },
+    },
+}

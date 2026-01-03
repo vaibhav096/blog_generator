@@ -120,7 +120,7 @@ def generate_blog_from_transcription(transcription: str) -> str:
     Do not generate or suggest a title.
     """
 
-    model = genai.GenerativeModel('gemini-2.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     response = model.generate_content(prompt)
     blog_text = response.text.strip()
 
