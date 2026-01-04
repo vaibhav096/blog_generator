@@ -12,7 +12,7 @@ from django.conf import settings
 import requests, random
 import google.generativeai as genai
 from .models import BlogPost
-
+from django_ratelimit.decorators import ratelimit
 # Load environment variables
 load_dotenv()
 
@@ -82,42 +82,99 @@ def fetch_transcript(video_id: str, languages=['en', 'mr','hi']) -> str:
 def generate_blog_from_transcription(transcription: str) -> str:
     """
     Generate a blog or appropriate summary from a YouTube transcript using Gemini API.
+    Intelligently adapts to different video types (educational, music, sports, etc).
     Title is provided by the user, so this only returns blog/summary content.
     """
 
     prompt = f"""
-    You are an expert content generator.  
-    You will receive the transcript of a YouTube video.  
-
-    ### Main Task:
-    Based on the type of video, decide the best output format:
-
-    1. **If video is Educational / Tutorial / Tech Review / Documentary / Interview / Lifestyle / Explainer** →  
-       Generate a **well-structured blog post** with: Introduction, Main Body, Key Takeaways, Conclusion.  
-
-    2. **If video is a Song / Music Video / Album Track** →  
-       Instead of a blog, return a **music summary** including:  
-       - Song name (if available)  
-       - Artist(s)  
-       - Genre & mood  
-       - Main theme / message  
-
-    3. **If video is a Sports Match / Cricket / Football / Highlights** →  
-       Return a **match summary** including:  
-       - Teams playing  
-       - Key highlights & turning points  
-       - Star performers  
-       - Final outcome / result (if present)  
-
-    4. **If video does not fit any category (random memes, trailers, pranks, short ads, etc.)** →  
-       Return a **brief descriptive summary** of what the video is about, instead of forcing a blog.  
-
-    ### Input Transcript:
+    You are an expert content creator and formatter.
+    
+    Your task: Analyze the video transcript and generate appropriate content based on video type.
+    
+    ## Step 1: Detect Video Type
+    Determine what type of video this is:
+    - **Educational/Tutorial**: Coding, how-to, tips, explanations, courses
+    - **Tech/Product Review**: Reviews, comparisons, analysis
+    - **Documentary/Interview**: Deep dives, interviews, discussions
+    - **Lifestyle/General**: Vlogs, personal content, storytelling
+    - **Music**: Songs, music videos, albums, covers
+    - **Sports**: Matches, highlights, sports analysis
+    - **Entertainment**: Comedy, pranks, short-form content
+    - **Other**: Anything else
+    
+    ## Step 2: Generate Content Based on Type
+    
+    ### FOR EDUCATIONAL/TUTORIAL/TECH/DOCUMENTARY:
+    Structure as a **professional blog post** with:
+    
+    ## Introduction
+    - Hook the reader with why this matters
+    - Brief overview of what they'll learn
+    
+    ## Key Concepts
+    - Main ideas or topics covered
+    - Use bullet points with clear explanations
+    
+    ## Deep Dive
+    - Detailed sections with H3 subheadings
+    - Practical examples, tips, or best practices
+    
+    ## Key Takeaways
+    - Summarize actionable insights
+    - Suggest next steps
+    
+    ### FOR MUSIC/ENTERTAINMENT:
+    Create a **summary/review** with:
+    
+    ## Overview
+    - Title, Artist(s), Genre (if mentioned)
+    - Key themes and mood
+    
+    ## Content Summary
+    - Main story, lyrics theme, or message
+    - Notable moments or sections
+    
+    ## Impressions
+    - Standout elements
+    - Overall vibe and appeal
+    
+    ### FOR SPORTS:
+    Create a **match/event summary** with:
+    
+    ## Match Overview
+    - Teams/Players, Date, Final Result
+    
+    ## Key Moments
+    - Turning points and highlights
+    - Notable performances
+    
+    ## Analysis
+    - What went well, what changed
+    
+    ### FOR OTHER TYPES:
+    Create a **brief, engaging summary** (5-7 short sections max)
+    
+    ## Formatting Rules (ALL types):
+    - Use H2 for main sections (## Section)
+    - Use H3 for subsections (### Subsection)
+    - Use **bold** for important terms
+    - Use bullet points or numbered lists
+    - Use > for blockquotes or highlights
+    - Keep language clear and conversational
+    - Aim for 500-1500 words depending on content
+    
+    ## Critical Output Rules:
+    - Return ONLY the formatted content
+    - DO NOT include a title (user provides it)
+    - DO NOT include meta information
+    - DO NOT add disclaimers or notes
+    - DO NOT say "This is a music video" or similar explanations
+    - Start directly with the first H2 heading
+    
+    ## Video Transcript:
     {transcription}
-
-    ### Output:
-    Return only the **final blog, summary, or description** in clean Markdown.  
-    Do not generate or suggest a title.
+    
+    Generate the content now following the appropriate structure for the video type detected.
     """
 
     model = genai.GenerativeModel('gemini-2.5-flash')
@@ -128,33 +185,73 @@ def generate_blog_from_transcription(transcription: str) -> str:
 
 
 def format_blog_content(raw_content: str) -> str:
-    """Format AI-generated markdown-like content into clean HTML before saving."""
-    formatted = raw_content
-
-    # 1. Headings: ####, ###, ##, #
-    formatted = re.sub(r"^#### (.*$)", r"<h4>\1</h4>", formatted, flags=re.MULTILINE)
-    formatted = re.sub(r"^### (.*$)", r"<h3>\1</h3>", formatted, flags=re.MULTILINE)
-    formatted = re.sub(r"^## (.*$)", r"<h2>\1</h2>", formatted, flags=re.MULTILINE)
-    formatted = re.sub(r"^# (.*$)", r"<h1>\1</h1>", formatted, flags=re.MULTILINE)
-
-    # 2. Bold text with colon or without colon
-    formatted = re.sub(r"\*\*(.*?)\:\*\*", r"<strong>\1:</strong><br>", formatted)  # with colon
-    formatted = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", formatted)        # general bold
-
-    # 3. Convert Markdown-style lists into <li>
-    formatted = re.sub(r"(?:\r?\n)?[*-] (.*?)(?=\r?\n|$)", r"<li>\1</li>", formatted)
-
-    # Wrap consecutive <li> inside <ul>
-    # We want to wrap multiple consecutive <li> together
-    def wrap_li(match):
-        items = match.group(0)
-        return f"<ul>{items}</ul>"
-
-    formatted = re.sub(r"(<li>[\s\S]*?<\/li>)+", wrap_li, formatted)
-
-    # 4. Replace remaining newlines with <br>
-    formatted = formatted.replace("\n", "<br>")
-
+    """
+    Convert markdown to clean HTML for proper display.
+    Handles headers, bold text, lists, code blocks, line breaks naturally.
+    """
+    formatted = raw_content.strip()
+    
+    # Normalize line breaks
+    formatted = formatted.replace('\r\n', '\n')
+    
+    # Remove excessive blank lines (keep max 2)
+    formatted = re.sub(r'\n{3,}', '\n\n', formatted)
+    
+    # Convert code blocks FIRST (before inline code): ```language\ncode\n``` to <pre><code>
+    # This handles multi-line code blocks with optional language
+    def replace_code_block(match):
+        language = match.group(1) or ''
+        code = match.group(2).strip()
+        lang_class = f' class="language-{language}"' if language else ''
+        return f'<pre><code{lang_class}>{code}</code></pre>'
+    
+    formatted = re.sub(r'```(\w+)?\n(.*?)```', replace_code_block, formatted, flags=re.DOTALL)
+    
+    # Convert headers: ## to <h2>, ### to <h3>, etc.
+    formatted = re.sub(r'^#### (.*?)$', r'<h4>\1</h4>', formatted, flags=re.MULTILINE)
+    formatted = re.sub(r'^### (.*?)$', r'<h3>\1</h3>', formatted, flags=re.MULTILINE)
+    formatted = re.sub(r'^## (.*?)$', r'<h2>\1</h2>', formatted, flags=re.MULTILINE)
+    formatted = re.sub(r'^# (.*?)$', r'<h1>\1</h1>', formatted, flags=re.MULTILINE)
+    
+    # Convert bold: **text** to <strong>text</strong>
+    formatted = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', formatted)
+    
+    # Convert italic: *text* to <em>text</em> (but not in bold patterns)
+    formatted = re.sub(r'(?<!\*)\*(.*?)\*(?!\*)', r'<em>\1</em>', formatted)
+    
+    # Convert inline code: `code` to <code>code</code> (but not already in <pre><code>)
+    formatted = re.sub(r'(?<!<code>)`([^`]+)`(?!</code>)', r'<code>\1</code>', formatted)
+    
+    # Convert bullet points: - item or * item to <li>item</li>
+    lines = formatted.split('\n')
+    result = []
+    in_list = False
+    
+    for line in lines:
+        if re.match(r'^[\s]*[-*]\s+', line):
+            if not in_list:
+                result.append('<ul>')
+                in_list = True
+            # Remove the bullet and add as list item
+            item = re.sub(r'^[\s]*[-*]\s+', '', line)
+            result.append(f'<li>{item}</li>')
+        else:
+            if in_list:
+                result.append('</ul>')
+                in_list = False
+            if line.strip():  # Only add non-empty lines
+                result.append(f'<p>{line}</p>')
+            elif line.strip() == '':  # Preserve some spacing
+                result.append('')
+    
+    if in_list:
+        result.append('</ul>')
+    
+    formatted = '\n'.join(result)
+    
+    # Clean up multiple <p></p> tags
+    formatted = re.sub(r'</p>\s*<p>', '</p><p>', formatted)
+    
     return formatted
 
 # View Functions
@@ -168,11 +265,18 @@ def home(request):
     return render(request, 'home.html')
 
 
+@login_required
 @csrf_exempt
+@ratelimit(key='user', rate='1/5m', block=False)
 def generate_blog(request):
     """Generate a blog from a YouTube video link (title is user-provided)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    if getattr(request, 'limited', False):
+        return JsonResponse({
+            'error': 'Too many requests. Please try again in 5 minutes.'
+        }, status=429, headers={'Retry-After': '300'})
 
     try:
         
@@ -215,7 +319,6 @@ def generate_blog(request):
             'content': blog_content,
             'blog_id': new_blog.id
         })
-
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
     except Exception as e:
@@ -233,7 +336,17 @@ def blog_details(request, pk):
     """Display details of a specific blog."""
     blog_article_detail = BlogPost.objects.get(id=pk)
     if request.user == blog_article_detail.user:
-        return render(request, 'blog-details.html', {'blog_article_detail': blog_article_detail})
+        # Format the content if it's not already HTML-formatted
+        # Check if content has HTML tags, if not, format it
+        content = blog_article_detail.generated_content
+        if not ('<h2>' in content or '<p>' in content or '<pre>' in content):
+            # Content is raw markdown, format it
+            content = format_blog_content(content)
+        
+        return render(request, 'blog-details.html', {
+            'blog_article_detail': blog_article_detail,
+            'formatted_content': content
+        })
     else:
         return redirect('index')
 
