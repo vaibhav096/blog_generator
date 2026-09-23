@@ -1,0 +1,2 @@
+web: gunicorn ai_blog_app.wsgi --worker-class gevent --workers 4 --worker-connections 100 --bind 0.0.0.0:$PORT
+worker: celery -A ai_blog_app worker --loglevel=info --concurrency=4

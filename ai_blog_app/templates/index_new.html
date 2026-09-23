@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Blog Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <!-- Code syntax highlighting -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css" rel="stylesheet">
+  
+  <style>
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .load {
+      width: 80px;
+      height: 80px;
+      margin: 40px auto;
+      border: solid 8px #2563eb;
+      border-radius: 50%;
+      border-right-color: transparent;
+      border-bottom-color: transparent;
+      animation: rotate 1s linear infinite;
+    }
+    
+    /* Blog content styling */
+    .blog-content {
+      line-height: 1.8;
+      color: #333;
+    }
+    
+    .blog-content h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      border-bottom: 3px solid #3b82f6;
+      padding-bottom: 0.5rem;
+      color: #1f2937;
+    }
+    
+    .blog-content h3 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      color: #374151;
+    }
+    
+    .blog-content h4 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #4b5563;
+    }
+    
+    .blog-content p {
+      margin-bottom: 1.25rem;
+      text-align: justify;
+    }
+    
+    .blog-content ul, .blog-content ol {
+      margin-left: 2rem;
+      margin-bottom: 1.25rem;
+    }
+    
+    .blog-content li {
+      margin-bottom: 0.75rem;
+      line-height: 1.6;
+    }
+    
+    .blog-content blockquote {
+      border-left: 4px solid #3b82f6;
+      padding-left: 1.5rem;
+      margin: 1.5rem 0;
+      font-style: italic;
+      color: #4b5563;
+      background-color: #f0f4f8;
+      padding: 1rem 1rem 1rem 1.5rem;
+    }
+    
+    .blog-content code {
+      background-color: #f3f4f6;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9em;
+      color: #e11d48;
+    }
+    
+    .blog-content pre {
+      background-color: #1f2937;
+      color: #e5e7eb;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      line-height: 1.5;
+    }
+    
+    .blog-content pre code {
+      background-color: transparent;
+      color: inherit;
+      padding: 0;
+    }
+    
+    .blog-content strong {
+      font-weight: 700;
+      color: #1f2937;
+    }
+    
+    .blog-content em {
+      font-style: italic;
+      color: #4b5563;
+    }
+    
+    /* Action buttons */
+    .action-buttons {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #e5e7eb;
+    }
+    
+    .btn-small {
+      padding: 0.6rem 1.2rem;
+      font-size: 0.875rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      font-weight: 500;
+    }
+    
+    .btn-copy {
+      background-color: #10b981;
+      color: white;
+    }
+    
+    .btn-copy:hover {
+      background-color: #059669;
+      transform: translateY(-1px);
+    }
+    
+    .btn-save {
+      background-color: #3b82f6;
+      color: white;
+    }
+    
+    .btn-save:hover {
+      background-color: #2563eb;
+      transform: translateY(-1px);
+    }
+    
+    .btn-delete {
+      background-color: #ef4444;
+      color: white;
+    }
+    
+    .btn-delete:hover {
+      background-color: #dc2626;
+      transform: translateY(-1px);
+    }
+    
+    .btn-new {
+      background-color: #8b5cf6;
+      color: white;
+    }
+    
+    .btn-new:hover {
+      background-color: #7c3aed;
+      transform: translateY(-1px);
+    }
+    
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 1rem;
+      right: 1rem;
+      padding: 1rem 1.5rem;
+      background-color: #10b981;
+      color: white;
+      border-radius: 0.375rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      animation: slideIn 0.3s ease-out;
+      z-index: 1000;
+    }
+    
+    .toast.error {
+      background-color: #ef4444;
+    }
+    
+    .toast.warning {
+      background-color: #f59e0b;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    
+    /* Metadata section */
+    .blog-meta {
+      display: flex;
+      gap: 2rem;
+      padding: 1rem;
+      background-color: #f9fafb;
+      border-radius: 0.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.875rem;
+      color: #6b7280;
+      flex-wrap: wrap;
+    }
+    
+    .blog-meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .blog-meta-label {
+      font-weight: 600;
+      color: #4b5563;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      margin-bottom: 0.25rem;
+    }
+    
+    .blog-meta-value {
+      font-size: 1rem;
+      color: #1f2937;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+      .blog-content h2 {
+        font-size: 1.5rem;
+      }
+      
+      .blog-content h3 {
+        font-size: 1.2rem;
+      }
+      
+      .blog-meta {
+        gap: 1rem;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+      }
+      
+      .btn-small {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen bg-gray-50 font-sans antialiased">
+
+  <!-- Navbar -->
+  <nav class="bg-gradient-to-r from-blue-600 to-blue-700 p-4 text-white shadow-lg">
+    <div class="container mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold">✨ AI Blog Generator</h1>
+      <div class="flex gap-4 text-sm sm:text-base">
+        <span class="text-blue-100">{{ user.username }}</span>
+        <a href="/blog-list" class="text-white hover:text-blue-100 transition">📚 Saved Blogs</a>
+        <a href="/logout" class="text-white hover:text-blue-100 transition">🚪 Logout</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="flex-grow container mx-auto mt-8 px-4 space-y-10">
+
+    <!-- Form Container -->
+    <div class="max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-lg border-t-4 border-blue-600">
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-bold text-gray-900">Transform Videos into Blogs</h2>
+        <p class="text-gray-600 mt-3">
+          Paste a YouTube link and a title to generate a professional blog post using AI.
+        </p>
+      </div>
+
+      <form id="blogForm" class="space-y-5">
+        <div>
+          <label for="videoTitle" class="block mb-2 font-semibold text-gray-700">Blog Title</label>
+          <input 
+            id="videoTitle" 
+            type="text" 
+            placeholder="e.g., How to Build a Blog Generator with Django" 
+            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
+          >
+        </div>
+
+        <div>
+          <label for="youtubeLink" class="block mb-2 font-semibold text-gray-700">YouTube Video Link</label>
+          <input 
+            id="youtubeLink" 
+            type="url" 
+            placeholder="https://www.youtube.com/watch?v=..." 
+            class="w-full p-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition"
+          >
+        </div>
+
+        <button 
+          id="generateBlogButton" 
+          type="submit" 
+          class="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transition-all active:scale-95"
+        >
+          🚀 Generate Blog
+        </button>
+      </form>
+
+      <!-- Loading Spinner -->
+      <div id="loading-circle" class="load" style="display: none;"></div>
+      <div id="loading-text" style="display: none;" class="text-center text-gray-600 mt-4">
+        <p>⏳ Fetching transcript & generating with AI...</p>
+        <p class="text-sm text-gray-500 mt-2">(This may take a minute)</p>
+      </div>
+    </div>
+
+    <!-- Blog Content Container -->
+    <div id="blogSection" class="hidden">
+      <div class="max-w-4xl mx-auto bg-white rounded-lg shadow-xl overflow-hidden">
+        
+        <!-- Blog Header -->
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-8 border-b-2 border-gray-200">
+          <h2 id="blogTitle" class="text-4xl font-bold text-gray-900 mb-4"></h2>
+          <div class="blog-meta">
+            <div class="blog-meta-item">
+              <span class="blog-meta-label">Generated</span>
+              <span id="generatedTime" class="blog-meta-value">Just now</span>
+            </div>
+            <div class="blog-meta-item">
+              <span class="blog-meta-label">Reading Time</span>
+              <span id="readingTime" class="blog-meta-value">~5 min</span>
+            </div>
+            <div class="blog-meta-item">
+              <span class="blog-meta-label">Words</span>
+              <span id="wordCount" class="blog-meta-value">0</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Blog Content -->
+        <div class="p-8">
+          <div id="blogContent" class="blog-content"></div>
+          
+          <!-- Action Buttons -->
+          <div class="action-buttons">
+            <button id="copyBtn" class="btn-small btn-copy" title="Copy content to clipboard">
+              📋 Copy Content
+            </button>
+            <button id="newBtn" class="btn-small btn-new" title="Generate another blog">
+              ✨ Generate New
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center p-6 text-gray-600 mt-12 border-t border-gray-200">
+    Made with ❤️ by <a href="https://github.com/vaibhav096" class="text-blue-600 hover:underline">Vaibhav Jadhav</a>
+    
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  
+  <script>
+    // Utility: Show toast notification
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${type === 'error' ? 'error' : type === 'warning' ? 'warning' : ''}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.animation = 'slideIn 0.3s ease-out reverse';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+    
+    // Utility: Calculate reading time
+    function calculateReadingTime(html) {
+      const text = html.replace(/<[^>]*>/g, '');
+      const wordCount = text.split(/\s+/).filter(w => w.length > 0).length;
+      const minutes = Math.ceil(wordCount / 200);
+      return { minutes: Math.max(1, minutes), wordCount };
+    }
+    
+    // Utility: Format timestamp
+    function formatTime(date) {
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(date);
+    }
+    
+    // Convert Markdown to HTML for proper rendering
+    function markdownToHtml(content) {
+      // This is a simple converter; Gemini already returns HTML-like content
+      // Just ensure proper rendering
+      return content;
+    }
+    
+    // Main form submission
+    document.getElementById('blogForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const youtubeLink = document.getElementById('youtubeLink').value.trim();
+      const videoTitle = document.getElementById('videoTitle').value.trim();
+      
+      if (!youtubeLink || !videoTitle) {
+        showToast('⚠️ Please fill in both fields', 'warning');
+        return;
+      }
+      
+      // Show loading
+      document.getElementById('loading-circle').style.display = 'block';
+      document.getElementById('loading-text').style.display = 'block';
+      document.getElementById('blogSection').classList.add('hidden');
+      
+      try {
+        const response = await fetch('/generate-blog', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ link: youtubeLink, title: videoTitle })
+        });
+        
+        const data = await response.json().catch(() => ({}));
+        
+        if (!response.ok || data.error) {
+          const errorMessage = data.error || `Request failed (${response.status})`;
+          const retryAfter = response.headers.get('Retry-After');
+          const retryMsg = retryAfter ? ` Retry in ${retryAfter}s` : '';
+          throw new Error(errorMessage + retryMsg);
+        }
+        
+        // Display blog
+        document.getElementById('blogTitle').textContent = data.title;
+        document.getElementById('blogContent').innerHTML = data.content;
+        document.getElementById('generatedTime').textContent = formatTime(new Date());
+        
+        // Calculate reading time and word count
+        const { minutes, wordCount } = calculateReadingTime(data.content);
+        document.getElementById('readingTime').textContent = `~${minutes} min`;
+        document.getElementById('wordCount').textContent = wordCount.toLocaleString();
+        
+        // Highlight code blocks if present
+        document.getElementById('blogContent').querySelectorAll('pre code').forEach(block => {
+          try {
+            hljs.highlightElement(block);
+          } catch (e) {
+            console.log('Code highlighting skipped for this block');
+          }
+        });
+        
+        document.getElementById('blogSection').classList.remove('hidden');
+        showToast('✅ Blog generated successfully!', 'success');
+        
+      } catch (error) {
+        console.error("Error:", error);
+        showToast(`❌ ${error.message}`, 'error');
+      } finally {
+        document.getElementById('loading-circle').style.display = 'none';
+        document.getElementById('loading-text').style.display = 'none';
+      }
+    });
+    
+    // Copy to clipboard
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      const content = document.getElementById('blogContent').innerText;
+      navigator.clipboard.writeText(content).then(() => {
+        showToast('✅ Copied to clipboard!', 'success');
+      }).catch(() => {
+        showToast('❌ Failed to copy', 'error');
+      });
+    });
+    
+    // Generate new blog
+    document.getElementById('newBtn').addEventListener('click', () => {
+      document.getElementById('blogForm').reset();
+      document.getElementById('blogSection').classList.add('hidden');
+      document.getElementById('videoTitle').focus();
+    });
+  </script>
+</body>
+</html>

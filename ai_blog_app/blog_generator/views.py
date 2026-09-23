@@ -1,20 +1,19 @@
 import os
 import json
 import re
-from dotenv import load_dotenv
+import logging
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.contrib.auth.models import User
 from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-import requests, random
+import random
 import google.generativeai as genai
 from .models import BlogPost
 from django_ratelimit.decorators import ratelimit
-# Load environment variables
-load_dotenv()
+
+logger = logging.getLogger('blog_generator')
 
 # Configure APIs
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -48,32 +47,36 @@ def validate_and_extract_video_id(url: str) -> str:
     return None
 
 
-proxies_list = []
-for key, value in os.environ.items():
-    if key.startswith("PROXY_"):
-        proxies_list.append(value)
-
-# Save original requests.get
-old_get = requests.get
-
-# Define a monkey-patched get
-def proxy_get(url, *args, **kwargs):
-    if proxies_list:
-        proxy = random.choice(proxies_list)  # pick a random proxy
-        kwargs["proxies"] = {"http": proxy, "https": proxy}
-    return old_get(url, *args, **kwargs)
-
-# Patch requests.get globally
-requests.get = proxy_get
+# Build proxy list from env vars at startup (PROXY_1=http://..., PROXY_2=http://...)
+proxies_list = [v for k, v in os.environ.items() if k.startswith("PROXY_")]
 
 
-def fetch_transcript(video_id: str, languages=['en', 'mr','hi']) -> str:
+def _get_proxy_dict() -> dict | None:
+    """Return a random proxy dict for requests, or None if no proxies configured."""
+    if not proxies_list:
+        return None
+    proxy = random.choice(proxies_list)
+    return {"http": proxy, "https": proxy}
+
+
+def fetch_transcript(video_id: str, languages=['en', 'mr', 'hi']) -> str:
+    """
+    Fetch YouTube transcript via youtube-transcript-api.
+
+    Passes proxies directly to the YouTubeTranscriptApi constructor — the only
+    correct way. The old approach of monkey-patching requests.get did NOT work
+    because the library uses requests.Session internally, not requests.get.
+
+    Production note: YouTube blocks datacenter IPs (Railway, Render, AWS, etc).
+    Set PROXY_1, PROXY_2, ... env vars to residential proxy URLs to bypass this.
+    """
     try:
-        ytt_api = YouTubeTranscriptApi()
+        proxies = _get_proxy_dict()
+        ytt_api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
         fetched_transcript = ytt_api.fetch(video_id, languages=languages)
         return " ".join([snippet.text for snippet in fetched_transcript])
     except Exception as e:
-        print(f"Transcript fetch error: {e}")
+        logger.error(f"Transcript fetch error for video {video_id}: {e}")
         return None
 
 
@@ -266,20 +269,24 @@ def home(request):
 
 
 @login_required
-@csrf_exempt
 @ratelimit(key='user', rate='1/5m', block=False)
 def generate_blog(request):
-    """Generate a blog from a YouTube video link (title is user-provided)."""
+    """
+    Accepts the YouTube link + title, creates a BlogPost with status='pending',
+    then dispatches a Celery background task and returns the blog_id immediately.
+    The frontend polls /blog-status/<blog_id> to track progress.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid request method'}, status=405)
 
     if getattr(request, 'limited', False):
-        return JsonResponse({
-            'error': 'Too many requests. Please try again in 5 minutes.'
-        }, status=429, headers={'Retry-After': '300'})
+        return JsonResponse(
+            {'error': 'Too many requests. Please try again in 5 minutes.'},
+            status=429,
+            headers={'Retry-After': '300'},
+        )
 
     try:
-        
         data = json.loads(request.body)
         yt_link = data.get('link')
         user_title = data.get('title')
@@ -287,38 +294,22 @@ def generate_blog(request):
         if not yt_link or not user_title:
             return JsonResponse({'error': 'Both YouTube link and Title are required'}, status=400)
 
-        # Step 1: Validate and parse video ID
-        video_id = validate_and_extract_video_id(yt_link)
-        if not video_id:
+        if not validate_and_extract_video_id(yt_link):
             return JsonResponse({'error': 'Invalid YouTube link'}, status=400)
 
-        # Step 2: Fetch transcript
-        transcription = fetch_transcript(video_id)
-        if not transcription:
-            return JsonResponse({'error': 'Failed to fetch transcript'}, status=500)
-
-        # Step 3: Generate blog content (AI only writes blog, not title)
-        try:
-            blog_content_raw = generate_blog_from_transcription(transcription)
-            blog_content = format_blog_content(blog_content_raw)  # ✅ apply formatting here
-        except Exception as e:
-            print(f"Blog generation error: {e}")
-            return JsonResponse({'error': 'Failed to generate blog'}, status=500)
-
-        # Step 4: Save blog article to DB
-        new_blog = BlogPost.objects.create(
-            user=request.user if request.user.is_authenticated else None,
+        # Create the BlogPost immediately (status=pending) so we have an ID to track
+        blog = BlogPost.objects.create(
+            user=request.user,
             youtube_title=user_title,
             youtube_link=yt_link,
-            generated_content=blog_content,
         )
 
-        # Step 5: Return JSON response
-        return JsonResponse({
-            'title': user_title,
-            'content': blog_content,
-            'blog_id': new_blog.id
-        })
+        # Dispatch the heavy work to Celery — returns instantly
+        from .tasks import generate_blog_task
+        generate_blog_task.delay(blog.id)
+
+        return JsonResponse({'blog_id': blog.id, 'title': user_title}, status=202)
+
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
     except Exception as e:
@@ -326,31 +317,59 @@ def generate_blog(request):
         return JsonResponse({'error': 'An unexpected error occurred'}, status=500)
 
 
+@login_required
+def blog_status(request, pk):
+    """
+    Polling endpoint. Frontend calls this every 2s to check if the background
+    task has finished.
+
+    Returns:
+      { status: 'pending'|'processing'|'completed'|'failed',
+        content: '<html>...',   # only when completed
+        error:   '...' }        # only when failed
+    """
+    try:
+        blog = BlogPost.objects.get(id=pk, user=request.user)
+    except BlogPost.DoesNotExist:
+        return JsonResponse({'error': 'Blog not found'}, status=404)
+
+    response = {'status': blog.status}
+
+    if blog.status == BlogPost.STATUS_COMPLETED:
+        response['content'] = blog.generated_content
+        response['title'] = blog.youtube_title
+
+    elif blog.status == BlogPost.STATUS_FAILED:
+        response['error'] = blog.error_message or 'Generation failed. Please try again.'
+
+    return JsonResponse(response)
+
+
+@login_required
 def blog_list(request):
     """Display all blogs for the logged-in user."""
     blog_articles = BlogPost.objects.filter(user=request.user)
     return render(request, "all-blogs.html", {'blog_articles': blog_articles})
 
 
+@login_required
 def blog_details(request, pk):
     """Display details of a specific blog."""
-    blog_article_detail = BlogPost.objects.get(id=pk)
-    if request.user == blog_article_detail.user:
-        # Format the content if it's not already HTML-formatted
-        # Check if content has HTML tags, if not, format it
-        content = blog_article_detail.generated_content
-        if not ('<h2>' in content or '<p>' in content or '<pre>' in content):
-            # Content is raw markdown, format it
-            content = format_blog_content(content)
-        
-        return render(request, 'blog-details.html', {
-            'blog_article_detail': blog_article_detail,
-            'formatted_content': content
-        })
-    else:
-        return redirect('index')
+    try:
+        blog_article_detail = BlogPost.objects.get(id=pk, user=request.user)
+    except BlogPost.DoesNotExist:
+        return redirect('blog-list')
 
-@csrf_exempt
+    content = blog_article_detail.generated_content
+    if content and not ('<h2>' in content or '<p>' in content or '<pre>' in content):
+        content = format_blog_content(content)
+
+    return render(request, 'blog-details.html', {
+        'blog_article_detail': blog_article_detail,
+        'formatted_content': content
+    })
+
+@login_required
 def delete_blog(request, pk):
     if request.method != 'DELETE':
         return JsonResponse({'error': 'Invalid request method'}, status=405)

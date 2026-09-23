@@ -497,7 +497,7 @@
       <!-- Loading Spinner -->
       <div id="loading-circle" class="load" style="display: none;"></div>
       <div id="loading-text" style="display: none;" class="text-center text-gray-600 mt-6">
-        <p class="font-medium text-base">⏳ Fetching transcript & generating with AI...</p>
+        <p id="loading-status-text" class="font-medium text-base">⏳ Queuing your request...</p>
         <p class="text-sm text-gray-500 mt-2">(This may take a minute - we're processing your video)</p>
       </div>
     </div>
@@ -551,12 +551,21 @@
     <p class="text-sm font-medium tracking-wide">
       Made with ❤️ by <a href="https://github.com/vaibhav096" class="text-blue-600 hover:text-blue-700 font-semibold transition duration-200">Vaibhav Jadhav</a>
     </p>
-    <p class="text-xs text-gray-500 mt-2">Powered by Google Gemini AI & Django</p>
+    <p class="text-xs text-gray-500 mt-2">Happy to see you here </p>
   </footer>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   
   <script>
+    // Read Django's CSRF token from the cookie so fetch() passes CSRF checks.
+    // Django sets this cookie automatically; we send it back as a header.
+    function getCsrfToken() {
+      return document.cookie.split(';')
+        .map(c => c.trim())
+        .find(c => c.startsWith('csrftoken='))
+        ?.split('=')[1] ?? '';
+    }
+
     // Utility: Show toast notification
     function showToast(message, type = 'success') {
       const toast = document.createElement('div');
@@ -589,55 +598,107 @@
       }).format(date);
     }
     
-    // Main form submission
+    // ── Polling helper ──────────────────────────────────────────────────────
+    // Calls /blog-status/<id> every 2s until the task is done or failed.
+    // Returns a Promise that resolves with the completed blog data.
+    function pollBlogStatus(blogId) {
+      return new Promise((resolve, reject) => {
+        const statusMessages = {
+          pending:    '⏳ Queued — waiting for a worker...',
+          processing: '🔄 Fetching transcript & generating with AI...',
+        };
+
+        const MAX_ATTEMPTS = 60;   // 60 × 2s = 2 minutes max
+        let attempts = 0;
+
+        const interval = setInterval(async () => {
+          attempts++;
+
+          // Hard timeout — worker may have crashed
+          if (attempts >= MAX_ATTEMPTS) {
+            clearInterval(interval);
+            reject(new Error('Generation timed out. Please try again.'));
+            return;
+          }
+
+          try {
+            const res = await fetch(`/blog-status/${blogId}/`);
+            const data = await res.json();
+
+            // Update the loading message to reflect real task state
+            if (statusMessages[data.status]) {
+              document.getElementById('loading-status-text').textContent =
+                statusMessages[data.status];
+            }
+
+            if (data.status === 'completed') {
+              clearInterval(interval);
+              resolve(data);
+            } else if (data.status === 'failed') {
+              clearInterval(interval);
+              reject(new Error(data.error || 'Blog generation failed'));
+            }
+            // pending / processing → keep polling
+          } catch (err) {
+            clearInterval(interval);
+            reject(err);
+          }
+        }, 2000); // poll every 2 seconds
+      });
+    }
+
+    // ── Main form submission ─────────────────────────────────────────────────
     document.getElementById('blogForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      
+
       const youtubeLink = document.getElementById('youtubeLink').value.trim();
       const videoTitle = document.getElementById('videoTitle').value.trim();
-      
+
       if (!youtubeLink || !videoTitle) {
         showToast('⚠️ Please fill in both fields', 'warning');
         return;
       }
-      
+
       // Show loading
       document.getElementById('loading-circle').style.display = 'block';
       document.getElementById('loading-text').style.display = 'block';
+      document.getElementById('loading-status-text').textContent = '⏳ Queuing your request...';
       document.getElementById('blogSection').classList.add('hidden');
-      
+
       try {
-        const response = await fetch('/generate-blog', {
+        // ── Step 1: Submit job (returns immediately with blog_id) ──────────
+        const submitRes = await fetch('/generate-blog', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+          },
           body: JSON.stringify({ link: youtubeLink, title: videoTitle })
         });
-        
-        const data = await response.json().catch(() => ({}));
-        
-        if (!response.ok || data.error) {
-          const errorMessage = data.error || `Request failed (${response.status})`;
-          const retryAfter = response.headers.get('Retry-After');
+
+        const submitData = await submitRes.json().catch(() => ({}));
+
+        if (!submitRes.ok || submitData.error) {
+          const retryAfter = submitRes.headers.get('Retry-After');
           const retryMsg = retryAfter ? ` Retry in ${retryAfter}s` : '';
-          throw new Error(errorMessage + retryMsg);
+          throw new Error((submitData.error || `Request failed (${submitRes.status})`) + retryMsg);
         }
-        
-        // Display blog
+
+        // ── Step 2: Poll until done ────────────────────────────────────────
+        const data = await pollBlogStatus(submitData.blog_id);
+
+        // ── Step 3: Display the finished blog ─────────────────────────────
         document.getElementById('blogTitle').textContent = data.title;
-        
-        // Display content as HTML (formatted by backend)
         document.getElementById('blogContent').innerHTML = data.content;
-        
         document.getElementById('generatedTime').textContent = formatTime(new Date());
-        
-        // Calculate reading time and word count
+
         const { minutes, wordCount } = calculateReadingTime(data.content);
         document.getElementById('readingTime').textContent = `~${minutes} min`;
         document.getElementById('wordCount').textContent = wordCount.toLocaleString();
-        
+
         document.getElementById('blogSection').classList.remove('hidden');
         showToast('✅ Blog generated successfully!', 'success');
-        
+
       } catch (error) {
         console.error("Error:", error);
         showToast(`❌ ${error.message}`, 'error');

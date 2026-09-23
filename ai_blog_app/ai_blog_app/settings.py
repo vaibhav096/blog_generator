@@ -63,11 +63,13 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'blog_generator',
-    # 'ratelimit',
+    'django_ratelimit',
+    'django_celery_results',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -165,6 +167,10 @@ LOGOUT_REDIRECT_URL = 'home'
 # Static files configuration
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = []
+# Compress + fingerprint static files in production only.
+# In development, collectstatic hasn't run so the manifest won't exist.
+if IS_PRODUCTION:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
@@ -187,6 +193,59 @@ if IS_PRODUCTION:
     csrf_origins = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
     if csrf_origins:
         CSRF_TRUSTED_ORIGINS = csrf_origins.split(',')
+
+# Ensure logs directory exists
+LOGS_DIR = BASE_DIR / 'logs'
+LOGS_DIR.mkdir(exist_ok=True)
+
+# ─── Cache + Celery Redis URL ─────────────────────────────────────────────────
+REDIS_URL = os.environ.get('REDIS_URL')  # explicitly set in production
+
+# Cache: use Redis when available, otherwise DummyCache for local dev.
+# DummyCache disables rate limiting in dev (acceptable) and doesn't trigger
+# django_ratelimit's E003 check the way LocMemCache does.
+if REDIS_URL or IS_PRODUCTION:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL or 'redis://localhost:6379/0',
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            }
+        }
+    }
+    RATELIMIT_ENABLE = True
+else:
+    # Dev without Redis: use LocMemCache and disable rate limiting.
+    # django_ratelimit only supports Redis/Memcached; disabling it in dev is fine.
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+    RATELIMIT_ENABLE = False
+    SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ─── Celery Configuration ────────────────────────────────────────────────────
+# Broker: Redis is used as the message queue (where tasks wait to be picked up)
+CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/0'
+
+# Backend: store task results in the Django database via django-celery-results
+CELERY_RESULT_BACKEND = 'django-db'
+
+# Serialize task arguments as JSON (safer than pickle)
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+
+# Store results for 1 day, then clean up automatically
+CELERY_RESULT_EXPIRES = 86400
+
+# Timezone awareness
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Logging Configuration
 LOGGING = {
