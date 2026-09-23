@@ -45,14 +45,14 @@ if not SECRET_KEY:
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true' and not IS_PRODUCTION
 
 # ALLOWED_HOSTS Configuration
-if IS_PRODUCTION:
-    ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
-    if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
-        raise ValueError("ALLOWED_HOSTS must be set in production")
-else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
+# if IS_PRODUCTION:
+#     ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
+#     if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
+#         raise ValueError("ALLOWED_HOSTS must be set in production")
+# else:
+#     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
-
+ALLOWED_HOSTS =['blog-generator-os5l.onrender.com']
 # Application definition
 
 INSTALLED_APPS = [
